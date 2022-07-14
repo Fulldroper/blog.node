@@ -1,4 +1,5 @@
 const mongodb = require('mongodb')
+const {v4: uuidv4} = require('uuid')
 const MongoClient = mongodb.MongoClient;
 
 module.exports = class db {
@@ -27,28 +28,42 @@ module.exports = class db {
     })
   }
 
-  connect(fn) {
+  connect(fn, {
+    dbName = this.dbName,
+    collection = this.collection
+  }) {
     this.client.connect().then(pipe => {
       this.pipe = pipe
-      return pipe.db(this.dbName).collection(this.collection)
+      return pipe.db(dbName).collection(collection)
     }).then(fn). finally(() => {
       this.pipe.close()
     }).catch(err => {
-      console.log(err);
+      console.error(err);
       return undefined;
     })
   }
 
-  add(value) {
-    this.connect(pipe => {
-      return pipe.insertOne({"value": value, "isDone": false})
+  registerUser(username, password) {
+    return new Promise((res, rej) => {
+      const auth = {
+        token: uuidv4(),
+        refresh: uuidv4(),
+        lastUpdate: new Date().getTime()
+      }
+      this.connect(pipe => pipe.findOne({username}), {collection: "users"}).then(isUserExist => {
+        if (isUserExist) {
+          rej({msg: "Username already exists"})
+        } else {
+          return pipe.insertOne({username, password, auth, id: auth.lastUpdate})
+        }
+      }).then(() => {
+        res({id: auth.lastUpdate, auth})
+      }).catch(rej)
     })
   }
-  del(id) {
-    this.connect(pipe => {
-      return pipe.remove({"_id": new mongodb.ObjectID(id)})
-    })
-  }
+
+  updateToken(oldToken, refreshToken) {}
+
   update(id, value) {
     this.connect(pipe => {
       return pipe.updateOne({
@@ -60,17 +75,7 @@ module.exports = class db {
       })
     })
   }
-  toggleDone(id, isDone) {
-    this.connect(pipe => {
-      return pipe.updateOne({
-        "_id": new mongodb.ObjectID(id)
-      }, {
-        $set: {
-          isDone: isDone
-        }
-      })
-    })
-  }
+
   getList() {
     return new Promise((res, rej) => {
       this.connect(async pipe => {
