@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "start": "clear && node .",
-    "test": "nodemon --exec npm start"
+    "test": "nodemon --exec npm start",
+    "deploy": "git add . && git commit -m 'auto-upd' && git push github master",
+    "pull": "git pull github master"
   },
   "keywords": [],
   "author": "",
