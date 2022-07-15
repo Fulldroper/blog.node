@@ -12,10 +12,11 @@ const validateToken = async (token, collection) => {
   if (new Date().getTime() - user.auth.lastUpdate > config.tokenLifeMS) {
     return false;
   } else {
-    return true
+    return true;
   };
 };
 
+// register user
 fastify.post('/reg', async (req, res) => {
   const {username, password} = req.body;
   if (!username || !password) {
@@ -35,11 +36,28 @@ fastify.post('/reg', async (req, res) => {
       refresh: uuidv4(),
       lastUpdate: new Date().getTime()
     }
-    await collection.insertOne({username, password, auth, id: auth.lastUpdate})
-    res.code(200).send({id: auth.lastUpdate, auth});
+    await collection.insertOne({
+      id: `${
+        auth.lastUpdate
+      }`,
+      username,
+      password,
+      auth,
+      posts: [],
+      files: []
+    })
+    res.code(200).send({
+      id: auth.lastUpdate,
+      auth: {
+        token: auth.token,
+        refresh: auth.refresh,
+        life: config.tokenLifeMS -(new Date().getTime() - auth.lastUpdate)
+      }
+    });
   } connection.close()
 })
 
+// update token
 fastify.post('/update', async (req, res) => {
   const {token, refresh} = req.body;
   if (!token || !refresh) {
@@ -58,14 +76,56 @@ fastify.post('/update', async (req, res) => {
     token: uuidv4(),
     refresh: uuidv4(),
     lastUpdate: new Date().getTime()
-  }
+  };
 
   await collection.updateOne({
     "id": user.id
   }, {$set: {
       auth
-    }})
+    }});
+  res.code(200).send({
+    id: user.id,
+    auth: {
+      token: auth.token,
+      refresh: auth.refresh,
+      life: config.tokenLifeMS -(new Date().getTime() - auth.lastUpdate)
+    }
+  });
+  connection.close();
 })
+
+// upload file
+
+// upload post
+
+// get file
+
+// get post
+fastify.get('/media/:uid/:mid/', async (req, res) => {
+  const {uid, mid} = req.params
+  if (!uid || !mid) {
+    res.code(400).header("Error", "Empty parameters are entered").send();
+    return;
+  }
+  const connection = await db.connect();
+  const user = await(await connection.db("blog").collection("users")).findOne({id: uid});
+
+  if ((! user) && user.files.includes(mid)) {
+    res.code(404).header("Error", "Not Found").send();
+    return;
+  }
+
+  const file = await(await connection.db("blog").collection("files")).findOne({id: `${mid}`});
+  if (! file) {
+    res.code(404).header("Error", "Not Found").send();
+    return;
+  }
+
+  connection.close();
+  res.code(200).header("Content-Type", file.type).send(Buffer.from(file.src, "base64"));
+})
+
+// get user posts
 
 fastify.listen(process.env.PORT || config.port || 80, (err, address) => {
   if (err) {
