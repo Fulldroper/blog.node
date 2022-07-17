@@ -1,11 +1,12 @@
-const fastify = require('fastify')({logger: false})
-const {config} = require('./package.json')
-const {v4: uuidv4} = require('uuid')
+const fastify = require('fastify')({logger: false});
+const {config} = require('./package.json');
+const {v4: uuidv4} = require('uuid');
+const mongodb = require('mongodb');
 
-const db = new((require('mongodb')).MongoClient)(config.mongoDBURL, {
+const db = new(mongodb.MongoClient)(config.mongoDBURL, {
   authSource: "admin",
   useNewUrlParser: true
-})
+});
 
 const validateToken = async (token, collection) => {
   const user = await collection.findOne({"auth.token": token});
@@ -95,6 +96,14 @@ fastify.post('/update', async (req, res) => {
 })
 
 // upload file
+fastify.get('/upload', async (req, res) => {
+  const connection = await db.connect();
+  const bucket = new mongodb.GridFSBucket(connection.db('files'));
+  const videoUploadStream = bucket.openUploadStream('test1');
+  const videoReadStream = (require("fs")).createReadStream('./assets/test1.mp4');
+  videoReadStream.pipe(videoUploadStream);
+  res.status(200).send("Done...");
+})
 
 // upload post
 
@@ -102,27 +111,50 @@ fastify.post('/update', async (req, res) => {
 
 // get post
 fastify.get('/media/:uid/:mid/', async (req, res) => {
-  const {uid, mid} = req.params
-  if (!uid || !mid) {
-    res.code(400).header("Error", "Empty parameters are entered").send();
-    return;
-  }
-  const connection = await db.connect();
-  const user = await(await connection.db("blog").collection("users")).findOne({id: uid});
+  try {
+    const {uid, mid} = req.params
 
-  if ((! user) && user.files.includes(mid)) {
-    res.code(404).header("Error", "Not Found").send();
-    return;
-  }
+    const connection = await db.connect();
+    const _db = connection.db('files');
+    const file = await _db.collection("fs.files").findOne({filename: mid});
 
-  const file = await(await connection.db("blog").collection("files")).findOne({id: `${mid}`});
-  if (! file) {
-    res.code(404).header("Error", "Not Found").send();
-    return;
-  }
+    // Create response headers
+    const meta = {
+      start : 0,
+      end: file.length -1
+    }
 
-  connection.close();
-  res.code(200).header("Content-Type", file.type).send(Buffer.from(file.src, "base64"));
+    console.log(req.headers);  
+    if (req?.headers?.range) {
+      const _meta = req.headers.range.matchAll(/^bytes\=(?<start>[0-9]*)\-(?<end>[0-9]*)$/g);
+      meta.start = _meta.start || 1
+      meta.end = _meta.end -1
+    }
+
+    meta.contentLength =  meta.end - meta.start + 1
+
+    console.log(meta.contentLength);
+
+    const bucket = new mongodb.GridFSBucket(_db);
+    const downloadStream = bucket.openDownloadStreamByName(mid, {start: meta.start});
+    const {createReadStream, createWriteStream, unlinkSync } = require('fs')
+    const duplexStreamID = `./${uid}${mid}${meta.start}.tmp`
+    const readStream = createReadStream(duplexStreamID)
+    const writeStream = createWriteStream(duplexStreamID)
+
+    downloadStream.pipe(writeStream)
+    await res
+      .code(206)
+      .header("Content-Range", `bytes ${meta.start}-${meta.end}/${file.length -1}`)
+      .header("Accept-Ranges", "bytes")
+      .header("Content-Length", meta.contentLength)
+      .header("Content-Type", "video/mp4")
+      .send(readStream)
+
+    unlinkSync(duplexStreamID)
+  } catch (error) {
+    console.error(error)
+  }
 })
 
 // get user posts
