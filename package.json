@@ -12,7 +12,7 @@
   "config": {
     "tokenLifeMS": 3600000,
     "port": 8081,
-    "mongoDBURL": "mongodb+srv://0f18ac72-1f56-4b25-86a1-99a0f9e3b75d:8b3e88b6-266b-46b7-bba7-45a184818a41@cluster0.twmxa.mongodb.net/admin?authSource=admin&replicaSet=atlas-3ibzjq-shard-0&w=majority&readPreference=primary&appname=MongoDB%20Compass&retryWrites=true&ssl=true"
+    "mongoDBURL": "mongodb://localhost"
   },
   "keywords": [],
   "author": "",
