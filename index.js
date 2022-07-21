@@ -1,4 +1,4 @@
-const fastify = require('fastify')({logger: false});
+const fastify = require('fastify')({logger: true});
 const {config} = require('./package.json');
 const {v4: uuidv4} = require('uuid');
 const mongodb = require('mongodb');
@@ -99,8 +99,8 @@ fastify.post('/update', async (req, res) => {
 fastify.get('/upload', async (req, res) => {
   const connection = await db.connect();
   const bucket = new mongodb.GridFSBucket(connection.db('files'));
-  const videoUploadStream = bucket.openUploadStream('test1');
-  const videoReadStream = (require("fs")).createReadStream('./assets/test1.mp4');
+  const videoUploadStream = bucket.openUploadStream('test3');
+  const videoReadStream = (require("fs")).createReadStream('./assets/test3.mp4');
   videoReadStream.pipe(videoUploadStream);
   res.status(200).send("Done...");
 })
@@ -114,6 +114,8 @@ fastify.get('/media/:uid/:mid/', async (req, res) => {
   try {
     const {uid, mid} = req.params
 
+    console.log(uid, mid);
+
     const connection = await db.connect();
     const _db = connection.db('files');
     const file = await _db.collection("fs.files").findOne({filename: mid});
@@ -124,7 +126,6 @@ fastify.get('/media/:uid/:mid/', async (req, res) => {
       end: file.length -1
     }
 
-    console.log(req.headers);  
     if (req?.headers?.range) {
       const _meta = req.headers.range.matchAll(/^bytes\=(?<start>[0-9]*)\-(?<end>[0-9]*)$/g);
       meta.start = _meta.start || 1
@@ -133,25 +134,16 @@ fastify.get('/media/:uid/:mid/', async (req, res) => {
 
     meta.contentLength =  meta.end - meta.start + 1
 
-    console.log(meta.contentLength);
-
     const bucket = new mongodb.GridFSBucket(_db);
     const downloadStream = bucket.openDownloadStreamByName(mid, {start: meta.start});
-    const {createReadStream, createWriteStream, unlinkSync } = require('fs')
-    const duplexStreamID = `./${uid}${mid}${meta.start}.tmp`
-    const readStream = createReadStream(duplexStreamID)
-    const writeStream = createWriteStream(duplexStreamID)
 
-    downloadStream.pipe(writeStream)
     await res
       .code(206)
       .header("Content-Range", `bytes ${meta.start}-${meta.end}/${file.length -1}`)
       .header("Accept-Ranges", "bytes")
       .header("Content-Length", meta.contentLength)
       .header("Content-Type", "video/mp4")
-      .send(readStream)
-
-    unlinkSync(duplexStreamID)
+      .send(downloadStream)
   } catch (error) {
     console.error(error)
   }
@@ -159,7 +151,7 @@ fastify.get('/media/:uid/:mid/', async (req, res) => {
 
 // get user posts
 
-fastify.listen(process.env.PORT || config.port || 80, (err, address) => {
+fastify.listen({port: process.env.PORT || config.port || 80}, (err, address) => {
   if (err) {
     throw err;
   }
