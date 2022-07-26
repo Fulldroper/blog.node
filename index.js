@@ -17,19 +17,47 @@ const validateToken = async (token, collection) => {
   };
 };
 
+const validateEmail = (email) => {
+  return email.match(
+    /^(([^<>()[\]\\.,;:\s@\"]+(\.[^<>()[\]\\.,;:\s@\"]+)*)|(\".+\"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/
+  );
+};
+
+const validateUsername = (username) => {
+  return username.match(
+    /^(?=[a-zA-Z0-9._]{8,16}$)(?!.*[_.]{2})[^_.].*[^_.]$/
+  );
+};
+
+const validatePassword = (password) => {
+  return password.match(
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{8,32}$/
+  );
+};
 // register user
 fastify.post('/reg', async (req, res) => {
-  const {username, password} = req.body;
-  if (!username || !password) {
+  const {username, password, email} = req.body;
+  if (!username || !password || !email) {
     res.code(400).header("Error", "Empty parameters are entered").send();
     return;
   }
+  if (!validateUsername(username)){
+    res.code(401).header("Error", "Your username is not valid. Only characters A-Z, a-z and '-'are acceptable .Must be more ther 8 charecters and less then 16.").send()
+  }
+  if (!validateEmail(email)){
+    res.code(401).header("Error", "Your email has prohibited characters").send()
+  }
+  if (!validatePassword(password)){
+    res.code(401).header("Error", "Your password is not valid. Only characters A-Z, a-z and '-'are acceptable .Must be more ther 8 charecters and less then 16.").send()
+  }
+
   const connection = await db.connect();
   const collection = await connection.db("blog").collection("users");
   const isUserExist = await collection.findOne({username});
-
-  if (isUserExist) {
-    res.code(406).header("Error", "Username already exists").send();
+  const isEmailExist = await collection.findOne({email});
+  console.log(isUserExist, isEmailExist)
+  if (isUserExist || isEmailExist) {
+    res.code(406).header("Error", "Username or mail already exists").send();
     return;
   } else {
     const auth = {
@@ -44,6 +72,7 @@ fastify.post('/reg', async (req, res) => {
       username,
       password,
       auth,
+      email,
       posts: [],
       files: []
     })
